@@ -1,5 +1,5 @@
-name: multi-net
-description: A minimal TypeScript Pulumi program
+name: svmkit-wireguard-playground
+description: Playground for implementing SPEs over wireguard
 runtime:
   name: nodejs
   options:
