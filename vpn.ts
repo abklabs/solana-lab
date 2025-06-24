@@ -115,6 +115,7 @@ export class Coordinator extends pulumi.ComponentResource {
     );
 
     this.hubs.push(hub);
+    return hub;
   }
 
   addSpoke(name: string) {
@@ -130,6 +131,7 @@ export class Coordinator extends pulumi.ComponentResource {
     );
 
     this.spokes.push(spoke);
+    return spoke;
   }
 
   spokeConfig() {
@@ -154,7 +156,7 @@ export class Coordinator extends pulumi.ComponentResource {
   configureHubs() {
     return this.hubs.map((hub) => {
       const otherPeers = this.hubs.filter((n) => n !== hub).map((h) => h.peer);
-      hub.peer.setupHost(<wireguard.OtherPeer[]>[
+      return hub.peer.setupHost(<wireguard.OtherPeer[]>[
         ...otherPeers,
         ...this.spokes,
       ]);
