@@ -7,3 +7,7 @@ export interface Node extends pulumi.ComponentResource {
   name: string;
   connection: Connection;
 }
+
+export function nameMaker(name: string) {
+  return (...p: string[]) => [name, ...p].join("-");
+}
