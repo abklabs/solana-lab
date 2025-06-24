@@ -41,6 +41,7 @@ export class Node extends pulumi.ComponentResource implements types.Node {
   name: string;
   instance: gcp.compute.Instance;
   connection: svmkit.types.input.ssh.ConnectionArgs;
+  machine: svmkit.machine.Machine;
 
   constructor(
     name: string,
@@ -107,5 +108,16 @@ export class Node extends pulumi.ComponentResource implements types.Node {
       privateKey: sshKey.privateKeyOpenssh,
       dialErrorLimit: 50,
     };
+
+    this.machine = new svmkit.machine.Machine(
+      n("machine"),
+      {
+        connection: this.connection,
+      },
+      pulumi.mergeOptions(opts, {
+        ...childInfo,
+        dependsOn: [this.instance],
+      }),
+    );
   }
 }

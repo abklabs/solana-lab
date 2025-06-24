@@ -58,6 +58,7 @@ export class Node extends pulumi.ComponentResource implements types.Node {
   name: string;
   instance: aws.ec2.Instance;
   connection: svmkit.types.input.ssh.ConnectionArgs;
+  machine: svmkit.machine.Machine;
 
   constructor(
     name: string,
@@ -136,5 +137,16 @@ mount -a
       user: adminUsername,
       privateKey: sshKey.privateKeyOpenssh,
     };
+
+    this.machine = new svmkit.machine.Machine(
+      n("machine"),
+      {
+        connection: this.connection,
+      },
+      pulumi.mergeOptions(opts, {
+        ...childInfo,
+        dependsOn: [this.instance],
+      }),
+    );
   }
 }
