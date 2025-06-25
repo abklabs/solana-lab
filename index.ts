@@ -4,68 +4,42 @@ import * as wireguard from "./wireguard";
 import * as pulumi from "@pulumi/pulumi";
 import * as types from "./types";
 import * as spe from "./spe";
+import * as vpn from "./vpn";
 
-let addrCount = 0;
+const coord = new vpn.Coordinator("coord");
+let allNodes: types.Node[] = [];
+let members: spe.Member[] = [];
 
-function createPeer(node: types.Node) {
-  addrCount += 1;
-  return new wireguard.Peer(
-    `${node.name}-wg-peer`,
+function newMember(node: types.Node) {
+  allNodes.push(node);
+
+  const hub = coord.addHub(node);
+
+  return new spe.Member(
+    node.name,
     {
       connection: node.connection,
-      listenPort: wireguard.info.publicPort,
-      address: [{ address: `10.0.0.${addrCount}`, netmask: 24 }],
-      endpoint: pulumi
-        .output(node.connection.host)
-        .apply((h) => `${h}:${wireguard.info.publicPort}`),
+      privateIP: pulumi.output(hub.peer.address)[0].address,
     },
     {
-      parent: node,
       dependsOn: node,
     },
   );
 }
 
-let allNodes: types.Node[] = [];
-let wgPeers: wireguard.Peer[] = [];
-
 const bootstrapNode = new aws.Node("aws-bootstrap");
-allNodes.push(bootstrapNode);
-
-const bootstrapPeer = createPeer(bootstrapNode);
-wgPeers.push(bootstrapPeer);
-
-const bootstrapMember = new spe.Member("bootstrap", {
-  connection: bootstrapNode.connection,
-  privateIP: pulumi.output(bootstrapPeer.address)[0].address,
-});
+const bootstrapMembership = newMember(bootstrapNode);
 
 const node0 = new gcp.Node("gcp-node0");
-allNodes.push(node0);
-const node0peer = createPeer(node0);
-wgPeers.push(node0peer);
-
-const node0Member = new spe.Member("node0", {
-  connection: node0.connection,
-  privateIP: pulumi.output(node0peer.address)[0].address,
-});
+const node0Membership = newMember(node0);
 
 const node1 = new aws.Node("aws-node1");
-allNodes.push(node1);
-const node1peer = createPeer(node1);
-wgPeers.push(node1peer);
+const node1Membership = newMember(node1);
 
-const node1Member = new spe.Member("node1", {
-  connection: node1.connection,
-  privateIP: pulumi.output(node1peer.address)[0].address,
-});
+const hubSetup = coord.configureHubs();
 
-const wgMeshSetup = wgPeers.map((p) =>
-  p.setupHost(...wgPeers.filter((x) => x !== p)),
-);
-
-spe.sendIt(bootstrapMember, [node0Member, node1Member], {
-  dependsOn: wgMeshSetup,
+spe.sendIt(bootstrapMembership, [node0Membership, node1Membership], {
+  dependsOn: hubSetup,
 });
 
 export const nodes_name = allNodes.map((x) => x.name);
