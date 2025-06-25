@@ -12,6 +12,7 @@ const stakeAccountKey = new svmkit.KeyPair("stake-account-key");
 
 const validatorConfig = new pulumi.Config("validator");
 export const agaveVersion = validatorConfig.get("version") ?? "2.2.1-1";
+const firewallConfig = new pulumi.Config("firewall");
 
 const runnerConfig = {};
 
@@ -31,6 +32,31 @@ const tunerParams = genericTunerParamsOutput.apply((p) => ({
   net: p.net,
   vm: p.vm,
   fs: p.fs,
+}));
+
+// Firewall setup
+const firewallVariant =
+  firewallConfig.get<svmkit.firewall.FirewallVariant>("variant") ??
+  svmkit.firewall.FirewallVariant.Generic;
+
+// Retrieve the default firewall parameters for that variant
+const genericFirewallParamsOutput =
+  svmkit.firewall.getDefaultFirewallParamsOutput({
+    variant: firewallVariant,
+  });
+
+// "Apply" those params so we can pass them to the Firewall constructor
+const firewallParams = genericFirewallParamsOutput.apply((f) => ({
+  allowPorts: [
+    ...(f.allowPorts ?? []),
+    "8000:8020/tcp",
+    "8000:8020/udp",
+    "8900/tcp",
+    "55121/udp",
+    gossipPort.toString(),
+    rpcPort.toString(),
+    faucetPort.toString(),
+  ],
 }));
 
 export type MemberArgs = {
@@ -68,6 +94,23 @@ export function sendIt(
   nodes: Member[],
   opts: pulumi.ComponentResourceOptions = {},
 ) {
+  const allNodes = [bootstrapNode, ...nodes];
+
+  allNodes.forEach((node) => {
+    // Create the Firewall resource on the EC2 instance
+    new svmkit.firewall.Firewall(
+      `${node.name}-firewall`,
+      {
+        connection: bootstrapNode.connection,
+        params: firewallParams,
+      },
+      {
+        parent: node,
+        dependsOn: [node],
+      },
+    );
+  });
+
   // Tuner setup
   const tunerVariant =
     tunerConfig.get<svmkit.tuner.TunerVariant>("variant") ??
@@ -221,8 +264,6 @@ export function sendIt(
       dependsOn: [bootstrapNode, faucet],
     },
   );
-
-  const allNodes = [bootstrapNode, ...nodes];
 
   nodes.forEach((node) => {
     const otherNodes = allNodes.filter((x) => x != node);
