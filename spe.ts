@@ -11,8 +11,8 @@ const treasuryKey = new svmkit.KeyPair("treasury-key");
 const stakeAccountKey = new svmkit.KeyPair("stake-account-key");
 
 const validatorConfig = new pulumi.Config("validator");
-export const agaveVersion = validatorConfig.get("version") ?? "2.2.1-1";
 const firewallConfig = new pulumi.Config("firewall");
+export const agaveVersion = validatorConfig.get("version") ?? "2.2.14-1";
 
 const runnerConfig = {};
 
