@@ -11,3 +11,5 @@ export interface Node extends pulumi.ComponentResource {
 export function nameMaker(name: string) {
   return (...p: string[]) => [name, ...p].join("-");
 }
+
+export type Optional<T, K extends keyof T> = Pick<Partial<T>, K> & Omit<T, K>;
