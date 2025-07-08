@@ -26,8 +26,12 @@ function newMember(node: types.Node) {
 }
 
 const bootstrap = newMember(new aws.Node("aws-bootstrap"));
-const node0 = newMember(new aws.Node("node0"));
-const node1 = newMember(new aws.Node("node1"));
+const node0 = newMember(new gcp.Node("node0"));
+const node1 = newMember(
+  new aws.Node("node1", {
+    instanceType: "r7a.8xlarge",
+  }),
+);
 
 const hubSetup = coord.configureHubs();
 
@@ -42,7 +46,7 @@ const clstr = new spe.Cluster(
 );
 
 clstr.addAgaveMember(node0);
-clstr.addAgaveMember(node1);
+clstr.addFiredancerMember(node1);
 
 export const nodes_name = allNodes.map((x) => x.name);
 export const nodes_public_ip = allNodes.map((x) => x.connection.host);
