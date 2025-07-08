@@ -25,20 +25,24 @@ function newMember(node: types.Node) {
   );
 }
 
-const bootstrapNode = new aws.Node("aws-bootstrap");
-const bootstrapMembership = newMember(bootstrapNode);
-
-const node0 = new gcp.Node("gcp-node0");
-const node0Membership = newMember(node0);
-
-const node1 = new aws.Node("aws-node1");
-const node1Membership = newMember(node1);
+const bootstrap = newMember(new aws.Node("aws-bootstrap"));
+const node0 = newMember(new aws.Node("node0"));
+const node1 = newMember(new aws.Node("node1"));
 
 const hubSetup = coord.configureHubs();
 
-spe.sendIt(bootstrapMembership, [node0Membership, node1Membership], {
-  dependsOn: hubSetup,
-});
+const clstr = new spe.Cluster(
+  "cluster",
+  {
+    bootstrapMember: bootstrap,
+  },
+  {
+    dependsOn: hubSetup,
+  },
+);
+
+clstr.addAgaveMember(node0);
+clstr.addAgaveMember(node1);
 
 export const nodes_name = allNodes.map((x) => x.name);
 export const nodes_public_ip = allNodes.map((x) => x.connection.host);

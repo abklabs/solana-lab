@@ -16,8 +16,6 @@ const stakeAccountKey = new svmkit.KeyPair("stake-account-key");
 const validatorConfig = new pulumi.Config("validator");
 export const agaveVersion = validatorConfig.get("version") ?? "2.2.14-1";
 
-const runnerConfig = {};
-
 export type MemberArgs = {
   connection: types.Connection;
   privateIP: pulumi.Output<string>;
@@ -48,219 +46,256 @@ export class Member extends pulumi.ComponentResource {
   }
 }
 
-export function sendIt(
-  bootstrapNode: Member,
-  nodes: Member[],
-  opts: pulumi.ComponentResourceOptions = {},
-) {
-  const allNodes = [bootstrapNode, ...nodes];
+export type ClusterArgs = {
+  bootstrapMember: Member;
+};
 
-  const genesis = new svmkit.genesis.Solana(
-    "genesis",
-    {
-      connection: bootstrapNode.connection,
-      version: agaveVersion,
-      flags: {
-        ledgerPath: "/home/sol/ledger",
-        bootstrapValidators: [
-          {
-            identityPubkey: bootstrapNode.validatorKey.publicKey,
-            votePubkey: bootstrapNode.voteAccountKey.publicKey,
-            stakePubkey: stakeAccountKey.publicKey,
-          },
-        ],
-        faucetPubkey: faucetKey.publicKey,
-        bootstrapValidatorStakeLamports: 10000000000, // 10 SOL
-        enableWarmupEpochs: true,
-        slotsPerEpoch: 8192,
-        clusterType: "development",
-        faucetLamports: 1000,
-        targetLamportsPerSignature: 0,
-        inflation: "none",
-        lamportsPerByteYear: 1,
-      },
-      primordial: [
-        {
-          pubkey: bootstrapNode.validatorKey.publicKey,
-          lamports: 1000000000000, // 1000 SOL
-        },
-        {
-          pubkey: treasuryKey.publicKey,
-          lamports: 100000000000000, // 100000 SOL
-        },
-        {
-          pubkey: faucetKey.publicKey,
-          lamports: 1000000000000, // 1000 SOL
-        },
-      ],
-    },
-    pulumi.mergeOptions(opts, {
-      dependsOn: [bootstrapNode],
-    }),
-  );
+export class Cluster extends pulumi.ComponentResource {
+  name: string;
+  environment: svmkit.types.input.solana.EnvironmentArgs;
+  childOpts: pulumi.ResourceOptions;
+  bootstrapMember: Member;
+  bootstrapValidator: Agave<Member>;
+  entryPoint: pulumi.Output<string>[];
+  knownValidator: pulumi.Output<string>[];
+  expectedGenesisHash: pulumi.Output<string>;
 
-  const environment = {
-    rpcURL: bootstrapNode.privateIP.apply(
-      (ip) => `http://${ip}:${networkInfo.rpcPort}`,
-    ),
-  };
+  constructor(
+    name: string,
+    args: ClusterArgs,
+    opts: pulumi.ComponentResourceOptions = {},
+  ) {
+    super("spe:cluster", name, {}, opts);
+    this.name = name;
+    this.bootstrapMember = args.bootstrapMember;
 
-  const rpcFaucetAddress = bootstrapNode.privateIP.apply(
-    (ip) => `${ip}:${networkInfo.faucetPort}`,
-  );
+    const _ = types.nameMaker(name);
 
-  const baseFlags: svmkit.types.input.agave.FlagsArgs = {
-    onlyKnownRPC: false,
-    rpcPort: networkInfo.rpcPort,
-    dynamicPortRange: "8002-8020",
-    privateRPC: false,
-    gossipPort: networkInfo.gossipPort,
-    rpcBindAddress: "0.0.0.0",
-    walRecoveryMode: "skip_any_corrupted_record",
-    limitLedgerSize: 50000000,
-    blockProductionMethod: "central-scheduler",
-    fullSnapshotIntervalSlots: 1000,
-    noWaitForVoteToStartLeader: true,
-    useSnapshotArchivesAtStartup: "when-newest",
-    allowPrivateAddr: true,
-    rpcFaucetAddress,
-  };
-
-  const bootstrapFlags: svmkit.types.input.agave.FlagsArgs = {
-    ...baseFlags,
-    fullRpcAPI: true,
-    noVoting: false,
-    gossipHost: bootstrapNode.privateIP,
-    enableExtendedTxMetadataStorage: true,
-    enableRpcTransactionHistory: true,
-  };
-
-  const faucet = new svmkit.faucet.Faucet(
-    "bootstrap-faucet",
-    {
-      connection: bootstrapNode.connection,
-      keypair: faucetKey.json,
-      flags: {
-        perRequestCap: 1000,
-      },
-    },
-    {
-      dependsOn: [genesis],
-    },
-  );
-
-  const bootstrapValidator = new Agave(
-    `bootstrap-validator`,
-    {
-      member: bootstrapNode,
-      environment,
-      runnerConfig,
-      version: agaveVersion,
-      startupPolicy: {
-        waitForRPCHealth: true,
-      },
-      timeoutConfig: {
-        rpcServiceTimeout: 120,
-      },
-      shutdownPolicy: {
-        force: true,
-      },
-      flags: bootstrapFlags,
-      info: {
-        name: bootstrapNode.name,
-        details: "The SPE bootstrap validator.",
-      },
-    },
-    {
-      dependsOn: [faucet],
-    },
-  );
-
-  nodes.forEach((node) => {
-    const otherNodes = allNodes.filter((x) => x != node);
-    const entryPoint = otherNodes.map((node) =>
-      node.privateIP.apply((v) => `${v}:${networkInfo.gossipPort}`),
-    );
-    const _ = (...x: string[]) => [node.name, ...x].join("-");
-
-    const flags: svmkit.types.input.agave.FlagsArgs = {
-      ...baseFlags,
-      entryPoint,
-      knownValidator: otherNodes.map((x) => x.validatorKey.publicKey),
-      expectedGenesisHash: genesis.genesisHash,
-      fullRpcAPI: node == bootstrapNode,
-      gossipHost: node.privateIP,
+    this.environment = {
+      rpcURL: this.bootstrapMember.privateIP.apply(
+        (ip) => `http://${ip}:${networkInfo.rpcPort}`,
+      ),
     };
 
-    new Agave(
-      _("validator"),
-      {
-        member: node,
-        environment,
-        runnerConfig,
-        version: agaveVersion,
-        shutdownPolicy: {
-          force: true,
+    this.childOpts = pulumi.mergeOptions(opts, {
+      parent: this,
+      dependsOn: [this.bootstrapMember],
+    });
+
+    const addDepends = <T extends pulumi.Resource>(r: T) => {
+      this.childOpts = pulumi.mergeOptions(this.childOpts, {
+        dependsOn: [r],
+      });
+
+      return r;
+    };
+
+    const genesis = addDepends(
+      new svmkit.genesis.Solana(
+        _("genesis"),
+        {
+          connection: this.bootstrapMember.connection,
+          version: agaveVersion,
+          flags: {
+            ledgerPath: "/home/sol/ledger",
+            bootstrapValidators: [
+              {
+                identityPubkey: this.bootstrapMember.validatorKey.publicKey,
+                votePubkey: this.bootstrapMember.voteAccountKey.publicKey,
+                stakePubkey: stakeAccountKey.publicKey,
+              },
+            ],
+            faucetPubkey: faucetKey.publicKey,
+            bootstrapValidatorStakeLamports: 10000000000, // 10 SOL
+            enableWarmupEpochs: true,
+            slotsPerEpoch: 8192,
+            clusterType: "development",
+            faucetLamports: 1000,
+            targetLamportsPerSignature: 0,
+            inflation: "none",
+            lamportsPerByteYear: 1,
+          },
+          primordial: [
+            {
+              pubkey: this.bootstrapMember.validatorKey.publicKey,
+              lamports: 1000000000000, // 1000 SOL
+            },
+            {
+              pubkey: treasuryKey.publicKey,
+              lamports: 100000000000000, // 100000 SOL
+            },
+            {
+              pubkey: faucetKey.publicKey,
+              lamports: 1000000000000, // 1000 SOL
+            },
+          ],
         },
-        flags,
-        info: {
-          name: node.name,
-          details: "A validator node on the SPE.",
-        },
-      },
-      {
-        dependsOn: [bootstrapValidator],
-      },
+        this.childOpts,
+      ),
     );
+
+    this.entryPoint = [
+      this.bootstrapMember.privateIP.apply(
+        (v) => `${v}:${networkInfo.gossipPort}`,
+      ),
+    ];
+    this.knownValidator = [this.bootstrapMember.validatorKey.publicKey];
+    this.expectedGenesisHash = genesis.genesisHash;
+
+    const rpcFaucetAddress = this.bootstrapMember.privateIP.apply(
+      (ip) => `${ip}:${networkInfo.faucetPort}`,
+    );
+
+    addDepends(
+      new svmkit.faucet.Faucet(
+        _("faucet"),
+        {
+          connection: this.bootstrapMember.connection,
+          keypair: faucetKey.json,
+          flags: {
+            perRequestCap: 1000,
+          },
+        },
+        this.childOpts,
+      ),
+    );
+
+    this.bootstrapValidator = addDepends(
+      new Agave(
+        _(`bootstrap-validator`),
+        {
+          member: this.bootstrapMember,
+          environment: this.environment,
+          flags: {
+            onlyKnownRPC: false,
+            rpcPort: networkInfo.rpcPort,
+            dynamicPortRange: "8002-8020",
+            privateRPC: false,
+            gossipPort: networkInfo.gossipPort,
+            rpcBindAddress: "0.0.0.0",
+            walRecoveryMode: "skip_any_corrupted_record",
+            limitLedgerSize: 50000000,
+            blockProductionMethod: "central-scheduler",
+            fullSnapshotIntervalSlots: 1000,
+            noWaitForVoteToStartLeader: true,
+            useSnapshotArchivesAtStartup: "when-newest",
+            allowPrivateAddr: true,
+            fullRpcAPI: true,
+            noVoting: false,
+            rpcFaucetAddress,
+            gossipHost: this.bootstrapMember.privateIP,
+            enableExtendedTxMetadataStorage: true,
+            enableRpcTransactionHistory: true,
+          },
+          version: agaveVersion,
+          startupPolicy: {
+            waitForRPCHealth: true,
+          },
+          timeoutConfig: {
+            rpcServiceTimeout: 120,
+          },
+          shutdownPolicy: {
+            force: true,
+          },
+          info: {
+            name: this.bootstrapMember.name,
+            details: "The SPE bootstrap validator.",
+          },
+        },
+        this.childOpts,
+      ),
+    );
+  }
+
+  makeStakedVoteAccount(target: Member) {
+    const _ = types.nameMaker(target.name);
 
     const transfer = new svmkit.account.Transfer(
       _("transfer"),
       {
-        connection: bootstrapNode.connection,
+        connection: this.bootstrapMember.connection,
         transactionOptions: {
           keyPair: treasuryKey.json,
         },
         amount: 100,
-        recipientPubkey: node.validatorKey.publicKey,
+        recipientPubkey: target.validatorKey.publicKey,
         allowUnfundedRecipient: true,
       },
-      {
-        dependsOn: [bootstrapValidator],
-      },
+      this.childOpts,
     );
     const voteAccount = new svmkit.account.VoteAccount(
       _("voteAccount"),
       {
-        connection: bootstrapNode.connection,
+        connection: this.bootstrapMember.connection,
         keyPairs: {
-          identity: node.validatorKey.json,
-          voteAccount: node.voteAccountKey.json,
+          identity: target.validatorKey.json,
+          voteAccount: target.voteAccountKey.json,
           authWithdrawer: treasuryKey.json,
         },
       },
-      {
-        dependsOn: [transfer],
-      },
+      pulumi.mergeOptions(this.childOpts, { dependsOn: transfer }),
     );
 
-    const stakeAccountKey = new svmkit.KeyPair(node.name + "-stakeAccount-key");
-    new svmkit.account.StakeAccount(
+    const stakeAccountKey = new svmkit.KeyPair(
+      target.name + "-stakeAccount-key",
+    );
+    return new svmkit.account.StakeAccount(
       _("stakeAccount"),
       {
-        connection: bootstrapNode.connection,
-
+        connection: this.bootstrapMember.connection,
         transactionOptions: {
           keyPair: treasuryKey.json,
         },
         keyPairs: {
           stakeAccount: stakeAccountKey.json,
-          voteAccount: node.voteAccountKey.json,
+          voteAccount: target.voteAccountKey.json,
         },
         amount: 10,
       },
-      {
-        dependsOn: [voteAccount],
-      },
+      pulumi.mergeOptions(this.childOpts, { dependsOn: [voteAccount] }),
     );
-  });
+  }
+
+  addAgaveMember(member: Member, opts: pulumi.ResourceOptions = {}) {
+    const stake = this.makeStakedVoteAccount(member);
+    const _ = types.nameMaker(member.name);
+
+    opts = pulumi.mergeOptions(this.childOpts, opts);
+
+    return new Agave(
+      _(`validator`),
+      {
+        member: member,
+        environment: this.environment,
+        flags: {
+          onlyKnownRPC: false,
+          rpcPort: networkInfo.rpcPort,
+          dynamicPortRange: "8002-8020",
+          privateRPC: false,
+          gossipPort: networkInfo.gossipPort,
+          rpcBindAddress: "0.0.0.0",
+          walRecoveryMode: "skip_any_corrupted_record",
+          limitLedgerSize: 50000000,
+          blockProductionMethod: "central-scheduler",
+          fullSnapshotIntervalSlots: 1000,
+          noWaitForVoteToStartLeader: true,
+          useSnapshotArchivesAtStartup: "when-newest",
+          allowPrivateAddr: true,
+          fullRpcAPI: false,
+          noVoting: false,
+          gossipHost: member.privateIP,
+          knownValidator: this.knownValidator,
+          entryPoint: this.entryPoint,
+          expectedGenesisHash: this.expectedGenesisHash,
+        },
+        version: agaveVersion,
+        info: {
+          name: member.name,
+        },
+      },
+      pulumi.mergeOptions(opts, {
+        dependsOn: [stake],
+      }),
+    );
+  }
 }
