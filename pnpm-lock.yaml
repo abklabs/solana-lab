@@ -24,8 +24,8 @@ importers:
         specifier: ^5.2.0
         version: 5.2.0(typescript@5.8.3)
       '@svmkit/pulumi-svmkit':
-        specifier: ^0.46.0
-        version: 0.46.0(typescript@5.8.3)
+        specifier: ^0.48.0
+        version: 0.48.0(typescript@5.8.3)
     devDependencies:
       '@types/node':
         specifier: ^18
@@ -297,8 +297,8 @@ packages:
     resolution: {integrity: sha512-t09vSN3MdfsyCHoFcTRCH/iUtG7OJ0CsjzB8cjAmKc/va/kIgeDI/TxsigdncE/4be734m0cvIYwNaV4i2XqAw==}
     engines: {node: '>=10'}
 
-  '@svmkit/pulumi-svmkit@0.46.0':
-    resolution: {integrity: sha512-Qu5dUKr7NfhIcB8HQPmB9F0O7PTa/no6kMtH5Sd5nxc6sZrNmlRokgZ2SmqTQ+x8AWjxIwtUqflH6uB/Kzavyw==}
+  '@svmkit/pulumi-svmkit@0.48.0':
+    resolution: {integrity: sha512-af0+U683VKw0cJxUV2Gisimwgb7p62pDm+ZBrrbcQogJxyu7/T4eCGfRi2RPnbwf2nPBT+xYLEyvmfpPypra/Q==}
 
   '@szmarczak/http-timer@4.0.6':
     resolution: {integrity: sha512-4BAffykYOgO+5nzBWYwE3W90sBgLJoUPRWWcL8wlyiM8IB8ipJz3UMJ9KXQd1RKQXpKp8Tutn80HZtWsu2u76w==}
@@ -1632,7 +1632,7 @@ snapshots:
 
   '@sindresorhus/is@4.6.0': {}
 
-  '@svmkit/pulumi-svmkit@0.46.0(typescript@5.8.3)':
+  '@svmkit/pulumi-svmkit@0.48.0(typescript@5.8.3)':
     dependencies:
       '@pulumi/pulumi': 3.181.0(typescript@5.8.3)
     transitivePeerDependencies:
