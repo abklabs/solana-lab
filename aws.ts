@@ -52,7 +52,9 @@ const securityGroup = new aws.ec2.SecurityGroup("security-group", {
   ],
 });
 
-export type NodeArgs = {};
+export type NodeArgs = {
+  instanceType?: string;
+};
 
 export class Node extends pulumi.ComponentResource implements types.Node {
   name: string;
@@ -107,7 +109,7 @@ mount -a
       n("instance"),
       {
         ami: ami.id,
-        instanceType,
+        instanceType: nodeArgs.instanceType ?? instanceType,
         keyName: keyPair.keyName,
         vpcSecurityGroupIds: [securityGroup.id],
         ebsBlockDevices: [

@@ -35,7 +35,9 @@ const firewall = new gcp.compute.Firewall("firewall", {
   targetTags: [],
 });
 
-export type NodeArgs = {};
+export type NodeArgs = {
+  machineType?: string;
+};
 
 export class Node extends pulumi.ComponentResource implements types.Node {
   name: string;
@@ -68,7 +70,7 @@ export class Node extends pulumi.ComponentResource implements types.Node {
     this.instance = new gcp.compute.Instance(
       n("instance"),
       {
-        machineType,
+        machineType: nodeArgs.machineType ?? machineType,
         bootDisk: {
           initializeParams: {
             image: osImage,
