@@ -2,6 +2,7 @@ import * as pulumi from "@pulumi/pulumi";
 import * as svmkit from "@svmkit/pulumi-svmkit";
 import * as types from "./types";
 import { Agave } from "./agave";
+import { Firedancer } from "./fd";
 
 export const networkInfo = {
   gossipPort: 8001,
@@ -291,6 +292,56 @@ export class Cluster extends pulumi.ComponentResource {
         version: agaveVersion,
         info: {
           name: member.name,
+        },
+      },
+      pulumi.mergeOptions(opts, {
+        dependsOn: [stake],
+      }),
+    );
+  }
+
+  addFiredancerMember(member: Member, opts: pulumi.ResourceOptions = {}) {
+    const stake = this.makeStakedVoteAccount(member);
+    const _ = types.nameMaker(member.name);
+
+    opts = pulumi.mergeOptions(this.childOpts, opts);
+
+    return new Firedancer(
+      _(`validator`),
+      {
+        member: member,
+        environment: this.environment,
+
+        config: {
+          user: "sol",
+          gossip: {
+            host: member.privateIP,
+            entrypoints: this.entryPoint,
+          },
+          consensus: {
+            identityPath: "/home/sol/validator-keypair.json",
+            voteAccountPath: "/home/sol/vote-account-keypair.json",
+            knownValidators: this.knownValidator,
+            expectedGenesisHash: this.expectedGenesisHash,
+          },
+          ledger: {
+            path: "/home/sol/ledger",
+            accountsPath: "/home/sol/accounts",
+          },
+          rpc: {
+            port: 8899,
+            private: true,
+          },
+          log: {
+            path: "-",
+          },
+          extraConfig: [
+            `
+[development.gossip]
+allow_private_address = true
+
+`,
+          ],
         },
       },
       pulumi.mergeOptions(opts, {
