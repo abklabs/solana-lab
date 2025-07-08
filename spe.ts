@@ -1,63 +1,22 @@
 import * as pulumi from "@pulumi/pulumi";
 import * as svmkit from "@svmkit/pulumi-svmkit";
 import * as types from "./types";
+import { Agave } from "./agave";
 
-const gossipPort = 8001;
-const rpcPort = 8899;
-const faucetPort = 9900;
+export const networkInfo = {
+  gossipPort: 8001,
+  rpcPort: 8899,
+  faucetPort: 9900,
+};
 
 const faucetKey = new svmkit.KeyPair("faucet-key");
 const treasuryKey = new svmkit.KeyPair("treasury-key");
 const stakeAccountKey = new svmkit.KeyPair("stake-account-key");
 
 const validatorConfig = new pulumi.Config("validator");
-const firewallConfig = new pulumi.Config("firewall");
 export const agaveVersion = validatorConfig.get("version") ?? "2.2.14-1";
 
 const runnerConfig = {};
-
-const tunerConfig = new pulumi.Config("tuner");
-
-const tunerVariant =
-  tunerConfig.get<svmkit.tuner.TunerVariant>("variant") ??
-  svmkit.tuner.TunerVariant.Generic;
-
-const genericTunerParamsOutput = svmkit.tuner.getDefaultTunerParamsOutput({
-  variant: tunerVariant,
-});
-
-const tunerParams = genericTunerParamsOutput.apply((p) => ({
-  cpuGovernor: p.cpuGovernor,
-  kernel: p.kernel,
-  net: p.net,
-  vm: p.vm,
-  fs: p.fs,
-}));
-
-// Firewall setup
-const firewallVariant =
-  firewallConfig.get<svmkit.firewall.FirewallVariant>("variant") ??
-  svmkit.firewall.FirewallVariant.Generic;
-
-// Retrieve the default firewall parameters for that variant
-const genericFirewallParamsOutput =
-  svmkit.firewall.getDefaultFirewallParamsOutput({
-    variant: firewallVariant,
-  });
-
-// "Apply" those params so we can pass them to the Firewall constructor
-const firewallParams = genericFirewallParamsOutput.apply((f) => ({
-  allowPorts: [
-    ...(f.allowPorts ?? []),
-    "8000:8020/tcp",
-    "8000:8020/udp",
-    "8900/tcp",
-    "55121/udp",
-    gossipPort.toString(),
-    rpcPort.toString(),
-    faucetPort.toString(),
-  ],
-}));
 
 export type MemberArgs = {
   connection: types.Connection;
@@ -95,52 +54,6 @@ export function sendIt(
   opts: pulumi.ComponentResourceOptions = {},
 ) {
   const allNodes = [bootstrapNode, ...nodes];
-
-  allNodes.forEach((node) => {
-    // Create the Firewall resource on the EC2 instance
-    new svmkit.firewall.Firewall(
-      `${node.name}-firewall`,
-      {
-        connection: bootstrapNode.connection,
-        params: firewallParams,
-      },
-      {
-        parent: node,
-        dependsOn: [node],
-      },
-    );
-  });
-
-  // Tuner setup
-  const tunerVariant =
-    tunerConfig.get<svmkit.tuner.TunerVariant>("variant") ??
-    svmkit.tuner.TunerVariant.Generic;
-
-  // Retrieve the default tuner parameters for that variant
-  const genericTunerParamsOutput = svmkit.tuner.getDefaultTunerParamsOutput({
-    variant: tunerVariant,
-  });
-
-  // "Apply" those params so we can pass them to the Tuner constructor
-  const tunerParams = genericTunerParamsOutput.apply((p) => ({
-    cpuGovernor: p.cpuGovernor,
-    kernel: p.kernel,
-    net: p.net,
-    vm: p.vm,
-    fs: p.fs,
-  }));
-
-  // Create the Tuner resource on the EC2 instance
-  const tuner = new svmkit.tuner.Tuner(
-    "tuner",
-    {
-      connection: bootstrapNode.connection,
-      params: tunerParams,
-    },
-    {
-      dependsOn: [bootstrapNode],
-    },
-  );
 
   const genesis = new svmkit.genesis.Solana(
     "genesis",
@@ -187,19 +100,21 @@ export function sendIt(
   );
 
   const environment = {
-    rpcURL: bootstrapNode.privateIP.apply((ip) => `http://${ip}:${rpcPort}`),
+    rpcURL: bootstrapNode.privateIP.apply(
+      (ip) => `http://${ip}:${networkInfo.rpcPort}`,
+    ),
   };
 
   const rpcFaucetAddress = bootstrapNode.privateIP.apply(
-    (ip) => `${ip}:${faucetPort}`,
+    (ip) => `${ip}:${networkInfo.faucetPort}`,
   );
 
   const baseFlags: svmkit.types.input.agave.FlagsArgs = {
     onlyKnownRPC: false,
-    rpcPort,
+    rpcPort: networkInfo.rpcPort,
     dynamicPortRange: "8002-8020",
     privateRPC: false,
-    gossipPort,
+    gossipPort: networkInfo.gossipPort,
     rpcBindAddress: "0.0.0.0",
     walRecoveryMode: "skip_any_corrupted_record",
     limitLedgerSize: 50000000,
@@ -234,12 +149,12 @@ export function sendIt(
     },
   );
 
-  const bootstrapValidator = new svmkit.validator.Agave(
+  const bootstrapValidator = new Agave(
     `bootstrap-validator`,
     {
+      member: bootstrapNode,
       environment,
       runnerConfig,
-      connection: bootstrapNode.connection,
       version: agaveVersion,
       startupPolicy: {
         waitForRPCHealth: true,
@@ -250,10 +165,6 @@ export function sendIt(
       shutdownPolicy: {
         force: true,
       },
-      keyPairs: {
-        identity: bootstrapNode.validatorKey.json,
-        voteAccount: bootstrapNode.voteAccountKey.json,
-      },
       flags: bootstrapFlags,
       info: {
         name: bootstrapNode.name,
@@ -261,27 +172,16 @@ export function sendIt(
       },
     },
     {
-      dependsOn: [bootstrapNode, faucet],
+      dependsOn: [faucet],
     },
   );
 
   nodes.forEach((node) => {
     const otherNodes = allNodes.filter((x) => x != node);
     const entryPoint = otherNodes.map((node) =>
-      node.privateIP.apply((v) => `${v}:${gossipPort}`),
+      node.privateIP.apply((v) => `${v}:${networkInfo.gossipPort}`),
     );
     const _ = (...x: string[]) => [node.name, ...x].join("-");
-
-    const tuner = new svmkit.tuner.Tuner(
-      _("tuner"),
-      {
-        connection: node.connection,
-        params: tunerParams,
-      },
-      {
-        dependsOn: [node],
-      },
-    );
 
     const flags: svmkit.types.input.agave.FlagsArgs = {
       ...baseFlags,
@@ -292,19 +192,15 @@ export function sendIt(
       gossipHost: node.privateIP,
     };
 
-    new svmkit.validator.Agave(
+    new Agave(
       _("validator"),
       {
+        member: node,
         environment,
         runnerConfig,
-        connection: node.connection,
         version: agaveVersion,
         shutdownPolicy: {
           force: true,
-        },
-        keyPairs: {
-          identity: node.validatorKey.json,
-          voteAccount: node.voteAccountKey.json,
         },
         flags,
         info: {
@@ -313,7 +209,7 @@ export function sendIt(
         },
       },
       {
-        dependsOn: [tuner, bootstrapValidator],
+        dependsOn: [bootstrapValidator],
       },
     );
 
