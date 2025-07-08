@@ -10,10 +10,6 @@ export const networkInfo = {
   faucetPort: 9900,
 };
 
-const faucetKey = new svmkit.KeyPair("faucet-key");
-const treasuryKey = new svmkit.KeyPair("treasury-key");
-const stakeAccountKey = new svmkit.KeyPair("stake-account-key");
-
 const validatorConfig = new pulumi.Config("validator");
 export const agaveVersion = validatorConfig.get("version") ?? "2.2.14-1";
 
@@ -35,14 +31,21 @@ export class Member extends pulumi.ComponentResource {
     opts: pulumi.ComponentResourceOptions = {},
   ) {
     super("multi-kit:spe:member", name, {}, opts);
+
+    const childInfo = pulumi.mergeOptions(opts, { parent: this });
+
     this.name = name;
     this.connection = memberArgs.connection;
     this.privateIP = memberArgs.privateIP;
-    this.validatorKey = new svmkit.KeyPair(`${name}-validator-key`, {}, opts);
+    this.validatorKey = new svmkit.KeyPair(
+      `${name}-validator-key`,
+      {},
+      childInfo,
+    );
     this.voteAccountKey = new svmkit.KeyPair(
       `${name}-vote-account-key`,
       {},
-      opts,
+      childInfo,
     );
   }
 }
@@ -60,6 +63,7 @@ export class Cluster extends pulumi.ComponentResource {
   entryPoint: pulumi.Output<string>[];
   knownValidator: pulumi.Output<string>[];
   expectedGenesisHash: pulumi.Output<string>;
+  treasuryKey: svmkit.KeyPair;
 
   constructor(
     name: string,
@@ -82,6 +86,15 @@ export class Cluster extends pulumi.ComponentResource {
       parent: this,
       dependsOn: [this.bootstrapMember],
     });
+
+    this.treasuryKey = new svmkit.KeyPair("treasury-key", {}, this.childOpts);
+
+    const faucetKey = new svmkit.KeyPair("faucet-key", {}, this.childOpts);
+    const stakeAccountKey = new svmkit.KeyPair(
+      "stake-account-key",
+      {},
+      this.childOpts,
+    );
 
     const addDepends = <T extends pulumi.Resource>(r: T) => {
       this.childOpts = pulumi.mergeOptions(this.childOpts, {
@@ -122,7 +135,7 @@ export class Cluster extends pulumi.ComponentResource {
               lamports: 1000000000000, // 1000 SOL
             },
             {
-              pubkey: treasuryKey.publicKey,
+              pubkey: this.treasuryKey.publicKey,
               lamports: 100000000000000, // 100000 SOL
             },
             {
@@ -211,18 +224,22 @@ export class Cluster extends pulumi.ComponentResource {
   makeStakedVoteAccount(target: Member) {
     const _ = types.nameMaker(target.name);
 
+    const childOpts = pulumi.mergeOptions(this.childOpts, {
+      parent: target,
+    });
+
     const transfer = new svmkit.account.Transfer(
       _("transfer"),
       {
         connection: this.bootstrapMember.connection,
         transactionOptions: {
-          keyPair: treasuryKey.json,
+          keyPair: this.treasuryKey.json,
         },
         amount: 100,
         recipientPubkey: target.validatorKey.publicKey,
         allowUnfundedRecipient: true,
       },
-      this.childOpts,
+      childOpts,
     );
     const voteAccount = new svmkit.account.VoteAccount(
       _("voteAccount"),
@@ -231,21 +248,23 @@ export class Cluster extends pulumi.ComponentResource {
         keyPairs: {
           identity: target.validatorKey.json,
           voteAccount: target.voteAccountKey.json,
-          authWithdrawer: treasuryKey.json,
+          authWithdrawer: this.treasuryKey.json,
         },
       },
-      pulumi.mergeOptions(this.childOpts, { dependsOn: transfer }),
+      pulumi.mergeOptions(childOpts, { dependsOn: transfer }),
     );
 
     const stakeAccountKey = new svmkit.KeyPair(
       target.name + "-stakeAccount-key",
+      {},
+      childOpts,
     );
     return new svmkit.account.StakeAccount(
       _("stakeAccount"),
       {
         connection: this.bootstrapMember.connection,
         transactionOptions: {
-          keyPair: treasuryKey.json,
+          keyPair: this.treasuryKey.json,
         },
         keyPairs: {
           stakeAccount: stakeAccountKey.json,
@@ -253,7 +272,7 @@ export class Cluster extends pulumi.ComponentResource {
         },
         amount: 10,
       },
-      pulumi.mergeOptions(this.childOpts, { dependsOn: [voteAccount] }),
+      pulumi.mergeOptions(childOpts, { dependsOn: [voteAccount] }),
     );
   }
 
@@ -262,6 +281,7 @@ export class Cluster extends pulumi.ComponentResource {
     const _ = types.nameMaker(member.name);
 
     opts = pulumi.mergeOptions(this.childOpts, opts);
+    opts = pulumi.mergeOptions(opts, { parent: member });
 
     return new Agave(
       _(`validator`),
@@ -305,6 +325,7 @@ export class Cluster extends pulumi.ComponentResource {
     const _ = types.nameMaker(member.name);
 
     opts = pulumi.mergeOptions(this.childOpts, opts);
+    opts = pulumi.mergeOptions(opts, { parent: member });
 
     return new Firedancer(
       _(`validator`),
