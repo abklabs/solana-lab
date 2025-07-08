@@ -1,6 +1,5 @@
 import * as aws from "./aws";
 import * as gcp from "./gcp";
-import * as wireguard from "./wireguard";
 import * as pulumi from "@pulumi/pulumi";
 import * as types from "./types";
 import * as spe from "./spe";
@@ -8,7 +7,6 @@ import * as vpn from "./vpn";
 
 const coord = new vpn.Coordinator("coord");
 let allNodes: types.Node[] = [];
-let members: spe.Member[] = [];
 
 function newMember(node: types.Node) {
   allNodes.push(node);
