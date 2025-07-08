@@ -145,8 +145,7 @@ mount -a
       {
         connection: this.connection,
       },
-      pulumi.mergeOptions(opts, {
-        ...childInfo,
+      pulumi.mergeOptions(childInfo, {
         dependsOn: [this.instance],
       }),
     );

@@ -94,8 +94,7 @@ export class Node extends pulumi.ComponentResource implements types.Node {
           "ssh-keys": sshKey.publicKeyOpenssh.apply((k) => `admin:${k}`),
         },
       },
-      pulumi.mergeOptions(opts, {
-        ...childInfo,
+      pulumi.mergeOptions(childInfo, {
         dependsOn: [subnet, firewall],
       }),
     );
@@ -116,8 +115,7 @@ export class Node extends pulumi.ComponentResource implements types.Node {
       {
         connection: this.connection,
       },
-      pulumi.mergeOptions(opts, {
-        ...childInfo,
+      pulumi.mergeOptions(childInfo, {
         dependsOn: [this.instance],
       }),
     );
