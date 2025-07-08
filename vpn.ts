@@ -42,7 +42,11 @@ export class Hub extends pulumi.ComponentResource {
       enableForwarding: true,
     };
 
-    this.peer = new wireguard.Peer(n("peer"), peerArgs, childInfo);
+    this.peer = new wireguard.Peer(
+      n("peer"),
+      peerArgs,
+      pulumi.mergeOptions(childInfo, { dependsOn: [this.node] }),
+    );
   }
 }
 
