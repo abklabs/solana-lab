@@ -3,7 +3,7 @@ description: Playground for implementing SPEs over wireguard
 runtime:
   name: nodejs
   options:
-    packagemanager: yarn
+    packagemanager: pnpm
 config:
   pulumi:tags:
     value:
