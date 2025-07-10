@@ -50,8 +50,14 @@ export class Member extends pulumi.ComponentResource {
   }
 }
 
+export type ValidatorArgs = {
+  version?: string;
+  runnerConfig?: pulumi.Input<svmkit.types.input.runner.ConfigArgs>;
+};
+
 export type ClusterArgs = {
   bootstrapMember: Member;
+  validatorConfig?: ValidatorArgs;
 };
 
 export class Cluster extends pulumi.ComponentResource {
@@ -73,6 +79,8 @@ export class Cluster extends pulumi.ComponentResource {
     super("spe:cluster", name, {}, opts);
     this.name = name;
     this.bootstrapMember = args.bootstrapMember;
+
+    const validatorConfig = args.validatorConfig ?? {};
 
     const _ = types.nameMaker(name);
 
@@ -108,6 +116,11 @@ export class Cluster extends pulumi.ComponentResource {
       new svmkit.genesis.Solana(
         _("genesis"),
         {
+          runnerConfig: {
+            packageConfig: {
+              additional: ["svmkit-spl-token-cli"],
+            },
+          },
           connection: this.bootstrapMember.connection,
           version: agaveVersion,
           flags: {
@@ -180,6 +193,7 @@ export class Cluster extends pulumi.ComponentResource {
         {
           member: this.bootstrapMember,
           environment: this.environment,
+          runnerConfig: args.validatorConfig?.runnerConfig,
           flags: {
             onlyKnownRPC: false,
             rpcPort: networkInfo.rpcPort,
@@ -201,7 +215,7 @@ export class Cluster extends pulumi.ComponentResource {
             enableExtendedTxMetadataStorage: true,
             enableRpcTransactionHistory: true,
           },
-          version: agaveVersion,
+          version: validatorConfig.version ?? agaveVersion,
           startupPolicy: {
             waitForRPCHealth: true,
           },
@@ -276,7 +290,11 @@ export class Cluster extends pulumi.ComponentResource {
     );
   }
 
-  addAgaveMember(member: Member, opts: pulumi.ResourceOptions = {}) {
+  addAgaveMember(
+    member: Member,
+    args: ValidatorArgs = {},
+    opts: pulumi.ResourceOptions = {},
+  ) {
     const stake = this.makeStakedVoteAccount(member);
     const _ = types.nameMaker(member.name);
 
@@ -288,6 +306,7 @@ export class Cluster extends pulumi.ComponentResource {
       {
         member: member,
         environment: this.environment,
+        runnerConfig: args.runnerConfig,
         flags: {
           onlyKnownRPC: false,
           rpcPort: networkInfo.rpcPort,
@@ -309,7 +328,7 @@ export class Cluster extends pulumi.ComponentResource {
           entryPoint: this.entryPoint,
           expectedGenesisHash: this.expectedGenesisHash,
         },
-        version: agaveVersion,
+        version: args.version ?? agaveVersion,
         info: {
           name: member.name,
         },
@@ -320,7 +339,11 @@ export class Cluster extends pulumi.ComponentResource {
     );
   }
 
-  addFiredancerMember(member: Member, opts: pulumi.ResourceOptions = {}) {
+  addFiredancerMember(
+    member: Member,
+    args: ValidatorArgs = {},
+    opts: pulumi.ResourceOptions = {},
+  ) {
     const stake = this.makeStakedVoteAccount(member);
     const _ = types.nameMaker(member.name);
 
@@ -332,7 +355,8 @@ export class Cluster extends pulumi.ComponentResource {
       {
         member: member,
         environment: this.environment,
-
+        version: args.version,
+        runnerConfig: args.runnerConfig,
         config: {
           user: "sol",
           gossip: {
