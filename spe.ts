@@ -50,14 +50,15 @@ export class Member extends pulumi.ComponentResource {
   }
 }
 
-export type ValidatorArgs = {
+export type ValidatorArgs<V extends { variant?: any }> = {
   version?: string;
   runnerConfig?: pulumi.Input<svmkit.types.input.runner.ConfigArgs>;
+  variant?: V["variant"];
 };
 
 export type ClusterArgs = {
   bootstrapMember: Member;
-  validatorConfig?: ValidatorArgs;
+  validatorConfig?: ValidatorArgs<svmkit.validator.AgaveArgs>;
 };
 
 export class Cluster extends pulumi.ComponentResource {
@@ -192,6 +193,7 @@ export class Cluster extends pulumi.ComponentResource {
         _(`bootstrap-validator`),
         {
           member: this.bootstrapMember,
+          variant: args.validatorConfig?.variant,
           environment: this.environment,
           runnerConfig: args.validatorConfig?.runnerConfig,
           flags: {
@@ -292,7 +294,7 @@ export class Cluster extends pulumi.ComponentResource {
 
   addAgaveMember(
     member: Member,
-    args: ValidatorArgs = {},
+    args: ValidatorArgs<svmkit.validator.AgaveArgs> = {},
     opts: pulumi.ResourceOptions = {},
   ) {
     const stake = this.makeStakedVoteAccount(member);
@@ -305,6 +307,7 @@ export class Cluster extends pulumi.ComponentResource {
       _(`validator`),
       {
         member: member,
+        variant: args.variant,
         environment: this.environment,
         runnerConfig: args.runnerConfig,
         flags: {
@@ -341,7 +344,7 @@ export class Cluster extends pulumi.ComponentResource {
 
   addFiredancerMember(
     member: Member,
-    args: ValidatorArgs = {},
+    args: ValidatorArgs<svmkit.validator.FiredancerArgs> = {},
     opts: pulumi.ResourceOptions = {},
   ) {
     const stake = this.makeStakedVoteAccount(member);
@@ -356,6 +359,7 @@ export class Cluster extends pulumi.ComponentResource {
         member: member,
         environment: this.environment,
         version: args.version,
+        variant: args.variant,
         runnerConfig: args.runnerConfig,
         config: {
           user: "sol",
