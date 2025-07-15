@@ -109,7 +109,14 @@ solana -u http://localhost:8899 validators
 ... and see the state of the network.
 
 
-6. (Optional) Tear down the example
+6. (Optional) Mint a token, and transfer it.
+
+```
+./bin/token-demo state
+```
+
+
+7. Tear down the example
 
 ```
 pulumi down
