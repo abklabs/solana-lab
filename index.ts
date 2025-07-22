@@ -48,13 +48,9 @@ const clstr = new spe.Cluster(
 clstr.addAgaveMember(node0);
 clstr.addFiredancerMember(node1);
 
-export const nodes_name = allNodes.map((x) => x.name);
-export const nodes_public_ip = allNodes.map((x) => x.connection.host);
-export const nodes_private_key = allNodes.map((x) => x.connection.privateKey);
-
-export const speInfo = {
-  treasuryKey: clstr.treasuryKey.json,
-  bootstrap: {
-    connection: clstr.bootstrapMember.connection,
-  },
-};
+export const nodes = allNodes.map((x) => {
+  return {
+    name: x.name,
+    connection: x.connection,
+  };
+});
