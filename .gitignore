@@ -1,3 +1,4 @@
 *~
 Pulumi.*.yaml
 node_modules
+.tap
