@@ -1,4 +1,4 @@
-#!/usr/bin/env pnpm tsx
+#!/usr/bin/env -S pnpm tsx
 
 import { default as t } from "tap";
 import { LAMPORTS_PER_SOL, Connection, Keypair } from "@solana/web3.js";
