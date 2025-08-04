@@ -9,6 +9,9 @@ const adminUsername = "admin";
 const instanceType = "t3.2xlarge";
 const instanceArch = "x86_64";
 
+const nodeConfig = new pulumi.Config("node");
+const iops = nodeConfig.getNumber("volumeIOPS") ?? 5000;
+
 const ami = pulumi.output(
   aws.ec2.getAmi({
     filters: [
@@ -117,13 +120,13 @@ mount -a
             deviceName: "/dev/sdf",
             volumeSize: 500,
             volumeType: "io2",
-            iops: 16000,
+            iops: iops,
           },
           {
             deviceName: "/dev/sdg",
             volumeSize: 1024,
             volumeType: "io2",
-            iops: 16000,
+            iops: iops,
           },
         ],
         userData,
