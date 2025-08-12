@@ -45,7 +45,14 @@ const clstr = new spe.Cluster(
   },
 );
 
-clstr.addAgaveMember(node0);
+clstr.addAgaveMember(node0, {
+  runnerConfig: {
+    packageConfig: {
+      overrideDir: "build",
+    },
+  },
+});
+
 clstr.addFiredancerMember(node1);
 
 export const nodes = allNodes.map((x) => {
