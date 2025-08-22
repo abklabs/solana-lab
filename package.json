@@ -17,7 +17,7 @@
     "@pulumi/gcp": "^8.31.0",
     "@pulumi/pulumi": "^3.113.0",
     "@pulumi/tls": "^5.2.0",
-    "@svmkit/pulumi-svmkit": "^0.49.0",
+    "@svmkit/pulumi-svmkit": "^0.51.0",
     "@tapjs/tsx": "^3.0.1"
   },
   "tap": {
