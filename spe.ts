@@ -10,8 +10,31 @@ export const networkInfo = {
   faucetPort: 9900,
 };
 
+const packageConfig = new pulumi.Config("packageConfig");
 const validatorConfig = new pulumi.Config("validator");
 export const agaveVersion = validatorConfig.get("version") ?? "2.2.14-1";
+
+function updateRunnerConfig(
+  config?: pulumi.Input<svmkit.types.input.runner.ConfigArgs>,
+) {
+  const overrideDir = packageConfig.get("overrideDir");
+
+  if (overrideDir === undefined) {
+    return config;
+  }
+
+  const newConfig = pulumi.output(config ?? {}).apply((config) => {
+    if (config.packageConfig === undefined) {
+      config.packageConfig = {};
+    }
+
+    config.packageConfig.overrideDir ??= overrideDir;
+
+    return config;
+  });
+
+  return newConfig;
+}
 
 export type MemberArgs = {
   connection: types.Connection;
@@ -117,11 +140,11 @@ export class Cluster extends pulumi.ComponentResource {
       new svmkit.genesis.Solana(
         _("genesis"),
         {
-          runnerConfig: {
+          runnerConfig: updateRunnerConfig({
             packageConfig: {
               additional: ["svmkit-spl-token-cli"],
             },
-          },
+          }),
           connection: this.bootstrapMember.connection,
           version: agaveVersion,
           flags: {
@@ -195,7 +218,7 @@ export class Cluster extends pulumi.ComponentResource {
           member: this.bootstrapMember,
           variant: args.validatorConfig?.variant,
           environment: this.environment,
-          runnerConfig: args.validatorConfig?.runnerConfig,
+          runnerConfig: updateRunnerConfig(args.validatorConfig?.runnerConfig),
           flags: {
             onlyKnownRPC: false,
             rpcPort: networkInfo.rpcPort,
@@ -309,7 +332,7 @@ export class Cluster extends pulumi.ComponentResource {
         member: member,
         variant: args.variant,
         environment: this.environment,
-        runnerConfig: args.runnerConfig,
+        runnerConfig: updateRunnerConfig(args.runnerConfig),
         flags: {
           onlyKnownRPC: false,
           rpcPort: networkInfo.rpcPort,
@@ -360,7 +383,7 @@ export class Cluster extends pulumi.ComponentResource {
         environment: this.environment,
         version: args.version,
         variant: args.variant,
-        runnerConfig: args.runnerConfig,
+        runnerConfig: updateRunnerConfig(args.runnerConfig),
         config: {
           user: "sol",
           gossip: {
