@@ -1,5 +1,5 @@
-name: svmkit-wireguard-playground
-description: Playground for implementing SPEs over wireguard
+name: solana-lab
+description: Lab for demonstrating cross-datacenter SPEs
 runtime:
   name: nodejs
   options:
